@@ -1,7 +1,8 @@
 ## 파일
+.env
 chat-01.py
 test.py
-.env
+*-before.py
 
 ## 폴더
 __pycache__/
