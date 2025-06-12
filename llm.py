@@ -6,23 +6,21 @@ from langchain.chains import (create_history_aware_retriever,
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
 
+
 load_dotenv()
 
-## llm 함수 정의 =======================================================================
+## LLM 생성 =======================================================================
 def get_llm(model='gpt-4o'):
     llm = ChatOpenAI(model=model)
     return llm
 
-
-## database 함수 정의 ==================================================================
+## Embedding 설정 + Vector Store Index 가져오기 ==========================#==========
 def get_database():
     PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 
@@ -38,7 +36,7 @@ def get_database():
 
     return database
 
-### Statefully manage chat history ====================================================
+### 세션별 히스토리 저장 ==============================================================
 store = {}
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
@@ -47,17 +45,8 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 
-## retrievalQA 함수 정의 ===============================================================
-def get_retrievalQA(): 
-    LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
-
-    llm = get_llm()
-    ## vector store에서 index 정보
-    database = get_database()
-    retriever = database.as_retriever(search_kwargs={"k": 2})
-
-    ## 코드추가 ###########################################################
-    ### Contextualize question ###
+## 히스토리 기반 리트리버 =============================================================
+def get_history_retriever(llm, retriever):
     contextualize_q_system_prompt = (
     "Given a chat history and the latest user question "
     "which might reference context in the chat history, "
@@ -78,10 +67,10 @@ def get_retrievalQA():
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
 )
-
-    #############################################################################
     
-    ### Answer question ###
+    return history_aware_retriever
+
+def get_qa_prompt():
     system_prompt = (
     '''[identity]
 - 당신은 전세사기피해 법률 전문가입니다.
@@ -103,6 +92,21 @@ def get_retrievalQA():
         ]
     )
 
+    return qa_prompt
+
+## 전체 chain 구성 ===============================================================
+def build_conversational_chain(): 
+    LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
+
+    llm = get_llm()
+
+    ## vector store에서 index 정보
+    database = get_database()
+    retriever = database.as_retriever(search_kwargs={"k": 2})
+
+    history_aware_retriever = get_history_retriever(llm, retriever)
+
+    qa_prompt = get_qa_prompt()
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
@@ -114,13 +118,13 @@ def get_retrievalQA():
         history_messages_key="chat_history",
         output_messages_key='answer',
     ).pick('answer')
+
     return conversational_rag_chain
 
 
-## [AI Message 함수 정의] ===============================================================
-def get_ai_message(user_message, session_id='default'):
-
-    qa_chain = get_retrievalQA()
+## AI Message ===========================================================================
+def stream_ai_message(user_message, session_id='default'):
+    qa_chain = build_conversational_chain()
 
     ai_message = qa_chain.stream(
         {"input": user_message}, 
