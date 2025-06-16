@@ -86,45 +86,24 @@ def bulid_few_shot_examples() -> str:
 
     return formmated_few_shot_prompt
     
+## [외부 사전 로드] ====================================================================================
+import json
 
-def build_qa_prompt():
-    ## [keyword dictionary] 키워드 사전 ###################################################
-    ## 1. 기본 형태 (가장 일반적인 형태)
-    ## * 장점 : 키 하나당 설면 하나, 단순 + 빠름
-    ## * 용도(실무 활용 예): FAQ 챗봇, 버튼식 응답
+def load_dictionary_from_file(path='keyword_dictionary.json'):
+    with open(path, 'r', encoding='utf-8') as file:
+       return json.load(file)
 
-    # keyword_dictionary = {
-    #     '임대인': '임대인은 주택을 임차인에게 제공하고, 계약 종료 시 보증금을 반환할 의무가 있는 자입니다.',
-    #     '주택':  '주택이란 「주택임대차보호법」 제2조에 따른 주거용 건물(공부상 주거용 건물이 아니라도 임대차계약 체결 당시 임대차목적물의 구조와 실질이 주거용 건물이고 임차인의 실제 용도가 주거용인 경우를 포함한다)을 말한다.',
-    # }
+def build_dictionary_text(dictionary: dict) -> str:
+   return '\n'.join([
+    f'{k} ({", ".join(v["tags"])}): {v["definition"]} [출처: {v["source"]}]'
+    for k, v in  dictionary.items()
+])
 
-    ## 2. 질문형 키워드 (질문 다양성 대응)
-    ## 장점: 유사한 징문을 여러 키로 분기 하여, 모두 같은 대답으로 연결, fallback 대응
-    ## 용도(실무 사용 예): 단답 챗봇, 키워드 FAQ 챗봇
-    # keyword_dictionary = {
-    #     '임대인 알려줘': '🚌임대인은 주택을 임차인에게 제공하고, 계약 종료 시 보증금을 반환할 의무가 있는 자입니다.',
-    #     '임대인 설명': '🚌임대인은 주택을 임차인에게 제공하고, 계약 종료 시 보증금을 반환할 의무가 있는 자입니다.',
-    #     '주택':  '🎞주택이란 「주택임대차보호법」 제2조에 따른 주거용 건물(공부상 주거용 건물이 아니라도 임대차계약 체결 당시 임대차목적물의 구조와 실질이 주거용 건물이고 임차인의 실제 용도가 주거용인 경우를 포함한다)을 말한다.',
-    # }
 
-    ## 3. 키워드 + 태그 기반 딕셔너리
-    keyword_dictionary ={
-        '임대인': {
-            'definition': '전세사기피해자법 제2조 제2항에 따른 임대인 정의입니다.',
-            'source': '전세사기피해자법 제2조',
-            'tags': ['법률', '용어', '기초'],
-        },
-        '주택': {
-            'definition': '「주택임대차보호법」 제2조에 따른 주거용 건물(공부상 주거용 건물이 아니라도 임대차계약 체결 당시 임대차목적물의 구조와 실질이 주거용 건물이고 임차인의 실제 용도가 주거용인 경우를 포함한다)을 말한다.',
-            'source': '주택임대차보호법 제2조',
-            'tags': ['법률', '용어', '기초'],
-        },
-    }
-
-    dictionary_text = '\n'.join([
-        f'{k} {v["tags"]}: {v["definition"]} [출처: {v["source"]}]'
-        for k, v in keyword_dictionary.items()
-    ])
+## [QA prompt] ==========================================================================================
+def build_qa_prompt(): 
+    keyword_dictionary = load_dictionary_from_file()
+    dictionary_text = build_dictionary_text(keyword_dictionary)
 
     system_prompt = (
     '''[identity]
